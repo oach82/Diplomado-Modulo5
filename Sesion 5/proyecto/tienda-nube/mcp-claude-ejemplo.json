@@ -1,0 +1,9 @@
+{
+  "_comentario": "Bloque para Claude Desktop. En Claude Desktop ve a Settings -> Developer -> Edit Config, que abre claude_desktop_config.json, y pega el contenido de 'mcpServers'. OJO: la clave es 'mcpServers' (no 'servers'). Luego cierra Claude por completo y vuelve a abrirlo. No requiere instalar nada: npx baja el servidor la primera vez. Ubicacion del archivo: Windows %APPDATA%\\Claude\\claude_desktop_config.json ; macOS ~/Library/Application Support/Claude/claude_desktop_config.json",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}

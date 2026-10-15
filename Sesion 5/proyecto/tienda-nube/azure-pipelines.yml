@@ -1,0 +1,196 @@
+# ──────────────────────────────────────────────────────────────────
+#  Pipeline Dia 5 — DevOps + IA + ejecucion en la nube
+#  Build -> E2E (local-first) -> E2E en Sauce Labs (si hay credenciales)
+#  Mismo concepto que el Dia 3; aqui sumamos la ejecucion en navegadores reales.
+# ──────────────────────────────────────────────────────────────────
+trigger:
+  branches: { include: [ main ] }
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Credenciales de Sauce: definelas como SECRETOS en el pipeline
+  # (Pipelines -> Edit -> Variables), NUNCA en el YAML en claro.
+  #   SAUCE_USERNAME, SAUCE_ACCESS_KEY
+  PYTHON_VERSION: '3.11'
+  # Azure Test Plans (para que el pipeline marque los Test Cases Passed/Failed).
+  # Ajusta a TU plan/suite (de la URL de Test Plans). El PAT va como SECRETO
+  # (AZURE_DEVOPS_PAT), igual que en el Dia 4.
+  TEST_PLAN_ID:  '14'    # ID del Test Plan 'Tienda v1 - Regresion'
+  TEST_SUITE_ID: '18'    # un suite del plan (el script recorre todos igual)
+
+stages:
+  # ── 1) BUILD: preparar app y dependencias ───────────────────────
+  - stage: Build
+    displayName: 'Build y preparacion'
+    jobs:
+      - job: preparar
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - script: npm install
+            displayName: 'Instalar app Tienda (Express + Faker)'
+            workingDirectory: 'app-tienda'
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: '$(PYTHON_VERSION)' }
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+              python -m playwright install --with-deps chromium
+            displayName: 'Instalar deps Python + navegador Playwright'
+
+  # ── 2) E2E LOCAL: pruebas contra la app en el agente ────────────
+  - stage: E2E_Local
+    displayName: 'E2E local-first (matriz multinavegador)'
+    dependsOn: Build
+    jobs:
+      - job: e2e_local
+        # MATRIZ: el mismo job corre una vez por cada navegador, en paralelo.
+        strategy:
+          matrix:
+            chromium: { BROWSER: 'chromium' }
+            firefox:  { BROWSER: 'firefox' }
+          maxParallel: 2
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: '$(PYTHON_VERSION)' }
+          - script: |
+              npm install
+              node datos/generar-datos.js
+              node servidor/server.js &
+            displayName: 'Arrancar app Tienda en background'
+            workingDirectory: 'app-tienda'
+          - script: |
+              pip install -r requirements.txt
+              python -m playwright install --with-deps $(BROWSER)
+              for i in $(seq 1 20); do curl -sf http://localhost:3000/api/health && break || sleep 1; done
+              # -n auto = paralelismo; --browser por matriz; Allure + JUnit
+              pytest -n auto --browser $(BROWSER) \
+                     --alluredir=resultados/allure \
+                     --junitxml=resultados/junit-$(BROWSER).xml
+            displayName: 'E2E en $(BROWSER) (paralelo)'
+          - script: |
+              # IA en el CI: si hubo fallos, arma el prompt de triaje para Claude
+              python tools/triage_ia.py resultados/junit-$(BROWSER).xml || true
+            displayName: 'Triaje de fallos (IA-ready)'
+            condition: always()
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'resultados/junit-$(BROWSER).xml'
+              testRunTitle: 'E2E Tienda - $(BROWSER) (Dia 5)'
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            displayName: 'Publicar resultados Allure + triaje'
+            inputs:
+              targetPath: 'resultados'
+              artifact: 'resultados-$(BROWSER)'
+
+          # ── Actualizar los Test Cases del plan (solo una vez, en chromium) ──
+          #  Igual que el Dia 4: usa el test_case_id del junit (tag @TC) para
+          #  marcar cada caso Passed/Failed en Azure Test Plans. Asi, si un cambio
+          #  rompe un test, el Test Plan lo reporta en ROJO automaticamente.
+          #  Requiere: AZURE_DEVOPS_PAT (secreto), TEST_PLAN_ID, TEST_SUITE_ID.
+          - script: |
+              if [ "$BROWSER" != "chromium" ]; then
+                echo "Solo publico al Test Plan desde chromium (evita duplicados)."; exit 0
+              fi
+              if [ -z "$TEST_PLAN_ID" ] || [ -z "$TEST_SUITE_ID" ] || [ -z "$AZURE_DEVOPS_PAT" ]; then
+                echo "Falta TEST_PLAN_ID / TEST_SUITE_ID / AZURE_DEVOPS_PAT: me salto la actualizacion del Test Plan."
+                exit 0
+              fi
+              python tools/publicar_test_plan.py || echo "[AVISO] No se pudo actualizar el Test Plan; el run si tiene los resultados."
+            displayName: 'Actualizar Test Points del Test Plan (desde chromium)'
+            condition: always()
+            env:
+              AZURE_DEVOPS_PAT: $(AZURE_DEVOPS_PAT)
+              TEST_PLAN_ID: $(TEST_PLAN_ID)
+              TEST_SUITE_ID: $(TEST_SUITE_ID)
+              JUNIT_PATH: 'resultados/junit-chromium.xml'
+
+  # ── 3) E2E EN SAUCE LABS: navegadores reales en la nube ─────────
+  #  Solo corre si existen las variables SAUCE_USERNAME y SAUCE_ACCESS_KEY.
+  #
+  #  COMO LLEGA SAUCE A NUESTRA APP (que NO es publica):
+  #    La app corre en el agente (localhost:3000). Sauce vive en la nube y NO
+  #    puede ver ese localhost. La solucion es SAUCE CONNECT: un tunel que
+  #    expone el localhost del agente a los navegadores de Sauce. Asi la URL
+  #    http://localhost:3000 funciona TAMBIEN desde el navegador real de Sauce.
+  - stage: E2E_Sauce
+    displayName: 'E2E en Sauce Labs (navegadores reales, via tunel)'
+    dependsOn: E2E_Local
+    condition: and(succeeded(), ne(variables['SAUCE_USERNAME'], ''))
+    jobs:
+      - job: e2e_sauce
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: '$(PYTHON_VERSION)' }
+
+          # 1) Arrancar la app en el agente (igual que en local)
+          - script: |
+              npm install
+              node datos/generar-datos.js
+              node servidor/server.js &
+              for i in $(seq 1 20); do curl -sf http://localhost:3000/api/health && break || sleep 1; done
+            displayName: 'Arrancar app Tienda en background'
+            workingDirectory: 'app-tienda'
+
+          # 2) Descargar y abrir el tunel Sauce Connect (expone localhost a Sauce)
+          - script: |
+              set -e
+              echo "Descargando Sauce Connect..."
+              curl -sL -o sc.tar.gz https://saucelabs.com/downloads/sauce-connect/5.2.2/sauce-connect-5.2.2_linux.x86_64.tar.gz
+              tar -xzf sc.tar.gz
+              SC_BIN=$(find . -name 'sauce-connect' -type f | head -n1)
+              echo "Abriendo tunel (queda en background)..."
+              "$SC_BIN" run \
+                --username "$SAUCE_USERNAME" \
+                --access-key "$SAUCE_ACCESS_KEY" \
+                --region us-west-1 \
+                --tunnel-name "$SAUCE_TUNNEL" &
+              # Esperar a que el tunel quede listo (endpoint de readiness local)
+              for i in $(seq 1 30); do
+                curl -sf http://localhost:9000/readiness && break || sleep 2
+              done
+              echo "Tunel listo (o timeout; el test lo confirmara)."
+            displayName: 'Abrir tunel Sauce Connect'
+            env:
+              SAUCE_USERNAME: $(SAUCE_USERNAME)
+              SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
+              SAUCE_TUNNEL: 'tienda-tunnel-$(Build.BuildId)'
+
+          # 3) Correr las pruebas en el navegador real de Sauce (via tunel)
+          - script: |
+              pip install -r requirements.txt
+              python -m playwright install chromium
+              pytest --junitxml=resultados/junit-sauce.xml
+            displayName: 'Correr E2E en Sauce Labs (navegador real)'
+            env:
+              SAUCE: '1'
+              SAUCE_USERNAME: $(SAUCE_USERNAME)
+              SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
+              SAUCE_REGION: 'us-west-1'
+              SAUCE_BROWSER: 'chrome'
+              SAUCE_PLATFORM: 'Windows 11'
+              SAUCE_TUNNEL: 'tienda-tunnel-$(Build.BuildId)'
+              # La app NO es publica: Sauce la ve por el tunel en localhost:3000
+              BASE_URL: 'http://localhost:3000'
+              BUILD_TAG: 'tienda-e2e-$(Build.BuildId)'
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'resultados/junit-sauce.xml'
+              testRunTitle: 'E2E Tienda - Sauce Labs (Dia 5)'
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            displayName: 'Publicar resultados Sauce (JUnit + link al dashboard)'
+            inputs:
+              targetPath: 'resultados'
+              artifact: 'resultados-sauce'

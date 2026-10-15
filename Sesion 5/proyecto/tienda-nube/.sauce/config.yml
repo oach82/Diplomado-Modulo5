@@ -1,0 +1,36 @@
+# ──────────────────────────────────────────────────────────────────
+#  Config de ejemplo para saucectl (CLI de Sauce Labs).
+#  saucectl empaqueta el proyecto y lo corre en la nube de Sauce.
+#  Esta via es la nativa de Playwright (JS/TS). Nuestro framework es
+#  Playwright for PYTHON, por eso en clase usamos la conexion remota
+#  via conftest.py (SAUCE=1). Dejamos este archivo como REFERENCIA de
+#  como se veria la config de saucectl si el framework fuera JS.
+#
+#  Docs: https://docs.saucelabs.com/web-apps/automated-testing/playwright/yaml/
+# ──────────────────────────────────────────────────────────────────
+apiVersion: v1alpha
+kind: playwright
+sauce:
+  region: us-west-1          # us-west-1 (default) o eu-central-1
+  concurrency: 2             # cuantas suites corren en paralelo
+  metadata:
+    build: tienda-e2e-$BUILD_ID
+    tags:
+      - e2e
+      - dia5
+playwright:
+  version: 1.48.0
+rootDir: ./
+suites:
+  - name: "Tienda E2E - Chrome Windows"
+    platformName: "Windows 11"
+    testMatch: [".*\\.spec\\.js"]   # saucectl espera specs JS; ver nota arriba
+    params:
+      browserName: "chromium"
+      project: "chromium"
+artifacts:
+  download:
+    when: always
+    match:
+      - "*.log"
+    directory: ./artifacts/

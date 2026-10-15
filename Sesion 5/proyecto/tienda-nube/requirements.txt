@@ -1,0 +1,19 @@
+# ── Dependencias del framework E2E (Dia 4 + Dia 5) ─────────────────
+# Playwright: motor de automatizacion de navegador
+playwright==1.48.0
+# pytest: runner de pruebas
+pytest==8.3.3
+# pytest-bdd: escribir escenarios en Gherkin y mapearlos a Python
+pytest-bdd==7.3.0
+# pytest-playwright: fixtures de Playwright para pytest (page, browser)
+pytest-playwright==0.5.2
+# Faker: datos de prueba sinteticos (data-driven), coherente con el Dia 1
+Faker==30.3.0
+# requests: pequeñas verificaciones contra la API (health, seed)
+requests==2.32.3
+
+# ── Nuevo en el Dia 5 ──────────────────────────────────────────────
+# pytest-xdist: ejecucion EN PARALELO (varias pruebas a la vez)
+pytest-xdist==3.6.1
+# allure-pytest: reportes ricos (pasos, adjuntos, historico) para CI/nube
+allure-pytest==2.13.5

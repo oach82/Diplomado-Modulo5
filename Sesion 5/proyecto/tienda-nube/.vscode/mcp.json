@@ -1,0 +1,9 @@
+{
+  "_comentario": "En esta sesion el cliente MCP es CLAUDE DESKTOP. Usa el archivo mcp-claude-ejemplo.json (clave 'mcpServers') y pegalo en Claude via Settings -> Developer -> Edit Config. Este archivo .vscode/mcp.json se incluye solo como alternativa si prefieres usar VS Code como cliente MCP (clave 'servers').",
+  "servers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}

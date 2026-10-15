@@ -1,0 +1,16 @@
+{
+  "name": "app-tienda",
+  "version": "1.0.0",
+  "description": "App Tienda (front + API) - laboratorio base para las pruebas E2E del Dia 4",
+  "type": "module",
+  "main": "servidor/server.js",
+  "scripts": {
+    "start": "node servidor/server.js",
+    "postinstall": "node datos/generar-datos.js"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^9.0.3",
+    "express": "^4.21.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,21 @@
+# Node
+node_modules/
+app-tienda/datos/db.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Playwright
+test-results/
+playwright-report/
+.cache/
+# Resultados de pruebas (JUnit) y artefactos de Sauce
+resultados/
+artifacts/
+
+# Credenciales (nunca versionar)
+.env
