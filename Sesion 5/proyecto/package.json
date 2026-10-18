@@ -1,0 +1,14 @@
+{
+  "name": "tienda-azure",
+  "version": "1.0.0",
+  "description": "Proyecto Dia 3 - Azure DevOps: pipeline, smoke tests y prueba de carga sobre la app Tienda",
+  "type": "module",
+  "scripts": {
+    "smoke": "node tests/smoke-api.js",
+    "carga": "node tests/carga-simple.js",
+    "todo": "node tests/smoke-api.js && node tests/carga-simple.js"
+  },
+  "keywords": ["qa", "azure", "devops", "pipelines", "load-testing"],
+  "author": "Lite Thinking University of Technology",
+  "license": "MIT"
+}

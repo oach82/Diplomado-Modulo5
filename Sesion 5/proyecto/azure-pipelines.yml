@@ -1,0 +1,289 @@
+# ──────────────────────────────────────────────────────────────────
+#  Pipeline Dia 5 — CONSOLIDADO (E2E local-first + Sauce Labs + Test Plan)
+#
+#  Estructura del repo (viene del Dia 4):
+#     prerequisito/app-tienda/   -> la app bajo prueba
+#     e2e/                       -> automatizacion (features, tests, tools, requirements.txt)
+#
+#  Dos stages, en paralelo:
+#    1) E2E_Local  -> matriz de navegadores (chromium/firefox) en el agente.
+#                     Publica resultados y actualiza el Test Plan (solo chromium).
+#    2) E2E_Sauce  -> las MISMAS pruebas en un navegador REAL de Sauce Labs,
+#                     via tunel (Sauce Connect). Tambien actualiza el Test Plan.
+#                     Solo corre si existe el secreto SAUCE_USERNAME.
+#
+#  PATRON CLAVE (vale para ambos stages): app + (tunel) + pytest en el MISMO
+#  paso/shell. Los procesos lanzados con '&' MUEREN al terminar un paso, y los
+#  stages NO comparten maquina; por eso todo lo que debe seguir vivo va junto.
+#
+#  SECRETOS esperados en el pipeline (Pipelines > Edit > Variables, marcados
+#  como secret):
+#     SAUCE_USERNAME, SAUCE_ACCESS_KEY   -> para el stage de Sauce
+#     AZURE_DEVOPS_PAT                   -> para actualizar el Test Plan
+#        (scope del PAT: 'Test Management (Read & write)')
+# ──────────────────────────────────────────────────────────────────
+trigger:
+  branches:
+    include:
+      - master
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20.x'
+  APP_DIR: 'prerequisito/app-tienda'
+  E2E_DIR: 'e2e'
+  TEST_PLAN_ID:  '3'
+  TEST_SUITE_ID: '4'
+
+stages:
+  # ════════════════════════════════════════════════════════════════
+  #  STAGE 1 — E2E LOCAL-FIRST (matriz multinavegador en el agente)
+  # ════════════════════════════════════════════════════════════════
+  - stage: E2E_Local
+    displayName: 'E2E local-first (matriz multinavegador)'
+    jobs:
+      - job: e2e_local
+        timeoutInMinutes: 30
+        strategy:
+          matrix:
+            chromium: { BROWSER: 'chromium' }
+            firefox:  { BROWSER: 'firefox' }
+          maxParallel: 2
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '$(NODE_VERSION)' }
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: '$(PYTHON_VERSION)' }
+
+          # app + pruebas en UN SOLO paso (la app en background debe seguir
+          # viva mientras corre pytest; por eso no se separa en dos pasos).
+          - script: |
+              set -e
+              echo "########## ARRANCAR APP ##########"
+              cd "$(Build.SourcesDirectory)/$(APP_DIR)"
+              npm install
+              node datos/generar-datos.js
+              nohup node servidor/server.js </dev/null > "$(Build.SourcesDirectory)/app.log" 2>&1 &
+              for i in $(seq 1 20); do
+                curl -sf http://localhost:3000/api/health > /dev/null && { echo ">>> APP LISTA"; break; }
+                sleep 1
+              done
+
+              echo "########## CORRER E2E ($(BROWSER)) ##########"
+              cd "$(Build.SourcesDirectory)/$(E2E_DIR)"
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+              python -m playwright install --with-deps $(BROWSER)
+              mkdir -p resultados
+              pytest -n auto --browser $(BROWSER) \
+                --alluredir=resultados/allure \
+                --junitxml=resultados/junit-$(BROWSER).xml
+            displayName: 'E2E en $(BROWSER): app + pruebas (un solo paso)'
+            env:
+              BASE_URL: 'http://localhost:3000'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(E2E_DIR)/resultados/junit-$(BROWSER).xml'
+              testRunTitle: 'E2E Tienda - $(BROWSER) (Dia 5)'
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            inputs:
+              targetPath: '$(E2E_DIR)/resultados'
+              artifact: 'resultados-$(BROWSER)'
+
+          # Actualizar el Test Plan de Azure (solo chromium, para no duplicar).
+          # Se salta solo si falta alguna variable (no rompe el pipeline).
+          - script: |
+              if [ "$BROWSER" != "chromium" ]; then echo "Solo chromium publica al Test Plan"; exit 0; fi
+              if [ -z "$TEST_PLAN_ID" ] || [ -z "$TEST_SUITE_ID" ] || [ -z "$AZURE_DEVOPS_PAT" ]; then
+                echo "[AVISO] Faltan TEST_PLAN_ID/TEST_SUITE_ID/AZURE_DEVOPS_PAT. Me salto el Test Plan."
+                exit 0
+              fi
+              python tools/publicar_test_plan.py || echo "[AVISO] no se pudo actualizar el Test Plan"
+            displayName: 'Actualizar Test Points del Test Plan'
+            condition: always()
+            workingDirectory: '$(E2E_DIR)'
+            env:
+              AZURE_DEVOPS_PAT: $(AZURE_DEVOPS_PAT)
+              TEST_PLAN_ID: $(TEST_PLAN_ID)
+              TEST_SUITE_ID: $(TEST_SUITE_ID)
+              JUNIT_PATH: 'resultados/junit-chromium.xml'
+
+  # ════════════════════════════════════════════════════════════════
+  #  STAGE 2 — E2E EN SAUCE LABS (navegador real, via tunel)
+  #  Requiere SAUCE_USERNAME y SAUCE_ACCESS_KEY como SECRETOS del pipeline.
+  # ════════════════════════════════════════════════════════════════
+  - stage: E2E_Sauce
+    displayName: 'E2E en Sauce Labs (navegador real, via tunel)'
+    dependsOn: []            # corre en paralelo con E2E_Local (no espera)
+    condition: ne(variables['SAUCE_USERNAME'], '')
+    jobs:
+      - job: e2e_sauce
+        timeoutInMinutes: 30
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '$(NODE_VERSION)' }
+          - task: UsePythonVersion@0
+            inputs: { versionSpec: '$(PYTHON_VERSION)' }
+
+          # ── PASO 1: arrancar la app Y abrir el tunel (ambos en background) ──
+          #  Clave para el error "STDIO streams did not close": redirigimos la
+          #  salida de los procesos en background a archivos y cerramos stdin con
+          #  </dev/null, para que NO hereden los streams del script. Asi el paso
+          #  termina limpio y los procesos quedan vivos para el siguiente paso.
+          - script: |
+              # NO usamos 'set -e' para que SIEMPRE lleguemos a imprimir el sc.log
+              echo "########## FASE 1: ARRANCAR APP ##########"
+              cd "$(Build.SourcesDirectory)/$(APP_DIR)"
+              npm install
+              node datos/generar-datos.js
+              nohup node servidor/server.js </dev/null > "$(Build.SourcesDirectory)/app.log" 2>&1 &
+              APP_OK=0
+              for i in $(seq 1 20); do
+                curl -sf http://localhost:3000/api/health > /dev/null && { APP_OK=1; echo ">>> APP LISTA"; break; }
+                sleep 1
+              done
+              if [ "$APP_OK" != "1" ]; then echo ">>> APP NO ARRANCO. app.log:"; cat "$(Build.SourcesDirectory)/app.log"; fi
+
+              echo "########## FASE 2: DESCARGAR SAUCE CONNECT ##########"
+              cd "$(Build.SourcesDirectory)/$(E2E_DIR)"
+              curl -fsSL -o sc.tar.gz https://saucelabs.com/downloads/sauce-connect/5.2.2/sauce-connect-5.2.2_linux.x86_64.tar.gz
+              echo ">>> Descarga: $? (0=ok)"
+              mkdir -p sc && tar -xzf sc.tar.gz -C sc
+              echo ">>> Contenido extraido:"
+              find sc -maxdepth 3 -type f
+              SC_BIN=$(find "$PWD/sc" \( -name 'sauce-connect' -o -name 'sc' \) \( -type f -o -type l \) | head -n1)
+              echo ">>> Binario encontrado: '$SC_BIN'"
+              if [ -z "$SC_BIN" ]; then echo "##[error]No encontre el binario de Sauce Connect"; exit 1; fi
+              chmod +x "$SC_BIN"
+              echo "$SC_BIN" > "$(Build.SourcesDirectory)/sc_bin.txt"
+              echo ">>> Ayuda de 'sc run' (para ver los flags reales):"
+              "$SC_BIN" run --help 2>&1 | head -n 40 || true
+
+              echo "########## FASE 3: ABRIR TUNEL (Sauce Connect 5) ##########"
+              # Sauce Connect 5 usa 'sc run' con --api-address para el endpoint de
+              # estado (readiness en /readyz). NO existe --status-address.
+              # --proxy-localhost allow: IMPRESCINDIBLE. Por defecto Sauce
+              # Connect 5 BLOQUEA (deny) el trafico a localhost. La app corre en
+              # localhost:3000 del agente, y el navegador remoto navega a esa
+              # misma URL; sin este flag el Chrome de Sauce resolveria 'localhost'
+              # como SU PROPIA VM y no veria la app. El puerto 3000 esta en la
+              # lista de puertos soportados para proxy-localhost en dispositivos
+              # virtuales, asi que no hace falta tocar /etc/hosts.
+              nohup "$SC_BIN" run \
+                --username "$SAUCE_USERNAME" \
+                --access-key "$SAUCE_ACCESS_KEY" \
+                --region us-west-1 \
+                --tunnel-name "$SAUCE_TUNNEL" \
+                --proxy-localhost allow \
+                --api-address :9000 \
+                </dev/null > "$(Build.SourcesDirectory)/sc.log" 2>&1 &
+              echo ">>> Tunel lanzado, esperando a que quede listo (hasta ~3 min)..."
+              TUNEL_OK=0
+              for i in $(seq 1 90); do
+                # Sauce Connect 5 expone el readiness en /readyz sobre el api-address
+                if curl -sf http://localhost:9000/readyz > /dev/null 2>&1; then
+                  TUNEL_OK=1; echo ">>> TUNEL LISTO (readyz OK)"; break
+                fi
+                # fallback por si cambia la ruta de salud
+                if curl -sf http://localhost:9000/readiness > /dev/null 2>&1; then
+                  TUNEL_OK=1; echo ">>> TUNEL LISTO (readiness OK)"; break
+                fi
+                # fallback por log
+                if grep -qiE "up and running|you may start your tests|tunnel is running|connected" "$(Build.SourcesDirectory)/sc.log" 2>/dev/null; then
+                  TUNEL_OK=1; echo ">>> TUNEL LISTO (segun log)"; break
+                fi
+                sleep 2
+              done
+
+              echo ""
+              echo "==================== INICIO sc.log (COPIAR DESDE AQUI) ===================="
+              cat "$(Build.SourcesDirectory)/sc.log" 2>/dev/null || echo "(sc.log vacio o inexistente)"
+              echo "==================== FIN sc.log (COPIAR HASTA AQUI) ===================="
+              echo ""
+
+              if [ "$TUNEL_OK" != "1" ]; then
+                echo "##[error]El tunel no quedo listo. Copia el bloque sc.log de arriba."
+                exit 1
+              fi
+              echo ">>> FASE 3 OK: tunel arriba."
+            displayName: 'Arrancar app + abrir tunel Sauce Connect'
+            env:
+              SAUCE_USERNAME: $(SAUCE_USERNAME)
+              SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
+              SAUCE_TUNNEL: 'tienda-tunnel-$(Build.BuildId)'
+
+          # ── PASO 2: correr pytest en Sauce (app y tunel siguen vivos) ──
+          - script: |
+              set -e
+              cd "$(Build.SourcesDirectory)/$(E2E_DIR)"
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+              python -m playwright install chromium
+              mkdir -p resultados
+              # --headed: Sauce EXIGE modo headed para que el navegador remoto
+              # grabe video. El conftest tambien lo fuerza, pero lo dejamos
+              # explicito. El conftest exporta SELENIUM_REMOTE_URL/CAPABILITIES
+              # (Selenium Grid de Sauce) al detectar SAUCE=1, asi que este mismo
+              # 'pytest' corre contra el Chrome REAL de Sauce.
+              pytest --headed --junitxml=resultados/junit-sauce.xml
+            displayName: 'Correr E2E en Sauce Labs (navegador real)'
+            env:
+              SAUCE: '1'
+              SAUCE_USERNAME: $(SAUCE_USERNAME)
+              SAUCE_ACCESS_KEY: $(SAUCE_ACCESS_KEY)
+              SAUCE_REGION: 'us-west-1'
+              SAUCE_BROWSER: 'chrome'
+              SAUCE_PLATFORM: 'Windows 11'
+              SAUCE_TUNNEL: 'tienda-tunnel-$(Build.BuildId)'
+              BASE_URL: 'http://localhost:3000'
+              BUILD_TAG: 'tienda-e2e-$(Build.BuildId)'
+
+          # ── PASO 3: cerrar el tunel (limpieza) ──
+          - script: |
+              # El binario de Sauce Connect 5 se llama 'sc' (no 'sauce-connect'),
+              # y se lanza como 'sc run'. Matamos por el patron real.
+              SC_BIN=$(cat "$(Build.SourcesDirectory)/sc_bin.txt" 2>/dev/null || true)
+              [ -n "$SC_BIN" ] && pkill -f "$SC_BIN" || true
+              pkill -f 'sc run' || true
+              pkill -f sauce-connect || true
+              echo "Tunel cerrado (si estaba abierto)."
+            displayName: 'Cerrar tunel'
+            condition: always()
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(E2E_DIR)/resultados/junit-sauce.xml'
+              testRunTitle: 'E2E Tienda - Sauce Labs (Dia 5)'
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            displayName: 'Publicar resultados Sauce + logs'
+            inputs:
+              targetPath: '$(E2E_DIR)/resultados'
+              artifact: 'resultados-sauce'
+
+          # Actualizar el Test Plan tambien con el resultado de Sauce.
+          # Se salta solo si falta alguna variable (no rompe el pipeline).
+          - script: |
+              if [ -z "$TEST_PLAN_ID" ] || [ -z "$TEST_SUITE_ID" ] || [ -z "$AZURE_DEVOPS_PAT" ]; then
+                echo "[AVISO] Faltan TEST_PLAN_ID/TEST_SUITE_ID/AZURE_DEVOPS_PAT. Me salto el Test Plan."
+                exit 0
+              fi
+              python tools/publicar_test_plan.py || echo "[AVISO] no se pudo actualizar el Test Plan"
+            displayName: 'Actualizar Test Points del Test Plan (Sauce)'
+            condition: always()
+            workingDirectory: '$(E2E_DIR)'
+            env:
+              AZURE_DEVOPS_PAT: $(AZURE_DEVOPS_PAT)
+              TEST_PLAN_ID: $(TEST_PLAN_ID)
+              TEST_SUITE_ID: $(TEST_SUITE_ID)
+              JUNIT_PATH: 'resultados/junit-sauce.xml'

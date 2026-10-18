@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tienda QA</title>
+<style>
+  :root { --amarillo:#FFE900; --negro:#111; --gris:#666; --borde:#e3e3e3; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: var(--negro); background: #fafafa; }
+  header { background: #fff; border-bottom: 3px solid var(--amarillo); padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 1.4rem; cursor: pointer; }
+  .carrito-btn { background: var(--negro); color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+  .carrito-btn b { color: var(--amarillo); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .filtros { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+  .filtros select, .filtros input { padding: 8px 12px; border: 1px solid var(--borde); border-radius: 6px; font-size: 0.9rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
+  .card { background: #fff; border: 1px solid var(--borde); border-top: 4px solid var(--amarillo); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; }
+  .card h3 { font-size: 1rem; margin-bottom: 6px; }
+  .card .cat { font-size: 0.72rem; text-transform: uppercase; color: var(--gris); letter-spacing: 1px; }
+  .card .precio { font-size: 1.2rem; font-weight: 700; margin: 10px 0; }
+  .card button { margin-top: auto; background: var(--amarillo); border: none; padding: 9px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+  .card a { color: #0057b8; text-decoration: none; font-size: 0.85rem; margin-top: 8px; }
+  .vista { display: none; }
+  .vista.activa { display: block; }
+  .detalle { background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 24px; max-width: 600px; }
+  .detalle .precio { font-size: 1.6rem; font-weight: 700; margin: 12px 0; }
+  .carrito-tabla { width: 100%; border-collapse: collapse; background: #fff; }
+  .carrito-tabla th, .carrito-tabla td { padding: 10px 14px; border-bottom: 1px solid var(--borde); text-align: left; }
+  .total { font-size: 1.3rem; font-weight: 700; margin: 16px 0; }
+  .btn-primario { background: var(--negro); color: #fff; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; }
+  .form-row { margin: 10px 0; }
+  .form-row label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--gris); }
+  .form-row input { width: 100%; max-width: 360px; padding: 9px 12px; border: 1px solid var(--borde); border-radius: 6px; }
+  .exito { background: #e9f7ea; border: 1px solid #8bd38f; color: #1b5e20; padding: 18px; border-radius: 10px; max-width: 500px; }
+  .vacio { color: var(--gris); padding: 20px 0; }
+  .volver { background: none; border: none; color: #0057b8; cursor: pointer; margin-bottom: 14px; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1 data-testid="logo" onclick="irCatalogo()">Tienda QA</h1>
+  <button class="carrito-btn" data-testid="abrir-carrito" onclick="irCarrito()">
+    Carrito (<b data-testid="contador-carrito">0</b>)
+  </button>
+</header>
+
+<main>
+  <!-- ── CATALOGO ── -->
+  <section id="vista-catalogo" class="vista activa" data-testid="vista-catalogo">
+    <div class="filtros">
+      <label for="filtro-categoria">Categoria:</label>
+      <select id="filtro-categoria" data-testid="filtro-categoria" onchange="renderCatalogo()">
+        <option value="">Todas</option>
+        <option value="hogar">Hogar</option>
+        <option value="tecnologia">Tecnologia</option>
+        <option value="ropa">Ropa</option>
+        <option value="juguetes">Juguetes</option>
+      </select>
+      <input id="busqueda" data-testid="busqueda" placeholder="Buscar producto..." oninput="renderCatalogo()">
+    </div>
+    <div id="grid" class="grid" data-testid="grid-productos"></div>
+    <p id="sin-resultados" class="vacio" data-testid="sin-resultados" style="display:none;">No hay productos para ese filtro.</p>
+  </section>
+
+  <!-- ── DETALLE ── -->
+  <section id="vista-detalle" class="vista" data-testid="vista-detalle">
+    <button class="volver" onclick="irCatalogo()">&larr; Volver al catalogo</button>
+    <div id="detalle" class="detalle"></div>
+  </section>
+
+  <!-- ── CARRITO ── -->
+  <section id="vista-carrito" class="vista" data-testid="vista-carrito">
+    <button class="volver" onclick="irCatalogo()">&larr; Seguir comprando</button>
+    <h2>Tu carrito</h2>
+    <div id="carrito-contenido"></div>
+  </section>
+
+  <!-- ── CONFIRMACION ── -->
+  <section id="vista-exito" class="vista" data-testid="vista-exito">
+    <div class="exito" data-testid="mensaje-exito">
+      <h2>Pedido confirmado</h2>
+      <p>Numero de pedido: <strong data-testid="numero-pedido"></strong></p>
+      <p>Gracias por tu compra.</p>
+    </div>
+    <button class="volver" onclick="irCatalogo()" style="margin-top:16px;">&larr; Volver al catalogo</button>
+  </section>
+</main>
+
+<script>
+  let productos = [];
+  let carrito = [];
+
+  async function cargarProductos() {
+    const r = await fetch('/api/productos');
+    productos = await r.json();
+    renderCatalogo();
+  }
+
+  function renderCatalogo() {
+    const cat = document.getElementById('filtro-categoria').value;
+    const q = document.getElementById('busqueda').value.toLowerCase();
+    let lista = productos;
+    if (cat) lista = lista.filter(p => p.categoria === cat);
+    if (q) lista = lista.filter(p => p.nombre.toLowerCase().includes(q));
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    document.getElementById('sin-resultados').style.display = lista.length ? 'none' : 'block';
+
+    lista.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.setAttribute('data-testid', 'producto-' + p.id);
+      card.setAttribute('data-categoria', p.categoria);
+      card.innerHTML = `
+        <span class="cat">${p.categoria}</span>
+        <h3 data-testid="nombre-producto">${p.nombre}</h3>
+        <div class="precio" data-testid="precio-producto">$${p.precio.toFixed(2)}</div>
+        <button data-testid="agregar-${p.id}" onclick="agregar(${p.id})">Agregar al carrito</button>
+        <a href="#" data-testid="ver-${p.id}" onclick="verDetalle(${p.id}); return false;">Ver detalle</a>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function agregar(id) {
+    const p = productos.find(x => x.id === id);
+    const item = carrito.find(x => x.id === id);
+    if (item) item.cantidad++;
+    else carrito.push({ ...p, cantidad: 1 });
+    actualizarContador();
+  }
+
+  function actualizarContador() {
+    const n = carrito.reduce((s, x) => s + x.cantidad, 0);
+    document.querySelector('[data-testid="contador-carrito"]').textContent = n;
+  }
+
+  function verDetalle(id) {
+    const p = productos.find(x => x.id === id);
+    document.getElementById('detalle').innerHTML = `
+      <span class="cat">${p.categoria}</span>
+      <h2 data-testid="detalle-nombre">${p.nombre}</h2>
+      <div class="precio" data-testid="detalle-precio">$${p.precio.toFixed(2)}</div>
+      <p>${p.descripcion}</p>
+      <p style="color:#666; margin:10px 0;">Stock: ${p.stock}</p>
+      <button class="btn-primario" data-testid="detalle-agregar" onclick="agregar(${p.id}); irCarrito();">Agregar y ver carrito</button>
+    `;
+    mostrar('detalle');
+  }
+
+  function renderCarrito() {
+    const cont = document.getElementById('carrito-contenido');
+    if (carrito.length === 0) {
+      cont.innerHTML = '<p class="vacio" data-testid="carrito-vacio">Tu carrito esta vacio.</p>';
+      return;
+    }
+    const total = carrito.reduce((s, x) => s + x.precio * x.cantidad, 0);
+    cont.innerHTML = `
+      <table class="carrito-tabla" data-testid="carrito-tabla">
+        <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th></tr></thead>
+        <tbody>
+          ${carrito.map(x => `
+            <tr data-testid="fila-${x.id}">
+              <td>${x.nombre}</td>
+              <td>${x.cantidad}</td>
+              <td>$${(x.precio * x.cantidad).toFixed(2)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="total" data-testid="carrito-total">Total: $${total.toFixed(2)}</div>
+      <h3 style="margin-top:20px;">Datos de contacto</h3>
+      <div class="form-row">
+        <label>Correo</label>
+        <input id="cliente-email" data-testid="input-email" placeholder="tu@correo.com">
+      </div>
+      <button class="btn-primario" data-testid="confirmar-pedido" onclick="confirmar()">Confirmar pedido</button>
+    `;
+  }
+
+  async function confirmar() {
+    const email = document.getElementById('cliente-email').value || 'cliente@test.com';
+    // Un pedido por el primer item (simplificado para el laboratorio)
+    const primero = carrito[0];
+    const r = await fetch('/api/pedidos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productoId: primero.id, cliente: email, cantidad: primero.cantidad }),
+    });
+    const pedido = await r.json();
+    document.querySelector('[data-testid="numero-pedido"]').textContent = pedido.id;
+    carrito = [];
+    actualizarContador();
+    mostrar('exito');
+  }
+
+  function mostrar(vista) {
+    document.querySelectorAll('.vista').forEach(v => v.classList.remove('activa'));
+    document.getElementById('vista-' + vista).classList.add('activa');
+  }
+  function irCatalogo() { mostrar('catalogo'); }
+  function irCarrito() { renderCarrito(); mostrar('carrito'); }
+
+  cargarProductos();
+</script>
+</body>
+</html>

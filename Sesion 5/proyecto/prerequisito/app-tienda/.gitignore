@@ -1,0 +1,8 @@
+node_modules/
+
+# Los datos se GENERAN con Faker (npm run generar), no se versionan.
+datos/db.json
+
+# Logs
+npm-debug.log*
+*.log

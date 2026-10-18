@@ -1,0 +1,122 @@
+# ══════════════════════════════════════════════════════════════════
+#  azure-pipelines.yml — Pipeline UNICO "todo en un job" (Dia 4)
+#  UN SOLO REPO: el del Dia 3 (ProyectoTienda) + la carpeta e2e/ que agregas.
+# ------------------------------------------------------------------
+#  Este archivo va en la RAIZ del repo ProyectoTienda, al lado del
+#  azure-pipelines.yml del Dia 3 (dale otro nombre si quieres conservar ambos,
+#  ej. azure-pipelines-e2e.yml, y crea un pipeline nuevo que apunte a el).
+#
+#  ESTRUCTURA ESPERADA del repo (confirmada en el agente):
+#      ProyectoTienda/
+#      ├─ prerequisito/app-tienda/   <- la app (servidor/server.js, datos/)
+#      ├─ tienda-azure/              <- tests sencillos: smoke + carga
+#      └─ e2e/                       <- automatizacion E2E (lo que AGREGAS):
+#                                       features/, screenplay/, tests/, conftest.py,
+#                                       requirements.txt, pytest.ini
+#
+#  POR QUE "TODO EN UN JOB": cada stage/job corre en un agente efimero. Si
+#  arrancas la app en un stage, al terminar ese stage la app MUERE. Por eso
+#  arrancamos la app con `&` y corremos smoke + carga + E2E en el MISMO job,
+#  mientras la app sigue viva. Al terminar el job, todo muere junto.
+#
+#  Al ser UN SOLO repo, NO hace falta 'resources: repositories' ni dos checkout.
+# ══════════════════════════════════════════════════════════════════
+
+trigger:
+  branches:
+    include:
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  NODE_VERSION: '20.x'
+  PYTHON_VERSION: '3.11'
+  BASE_URL: 'http://localhost:3000'
+  # Rutas relativas a la raiz del repo (NO llevan prefijo de repo: es un solo repo).
+  APP_DIR:  'prerequisito/app-tienda'   # carpeta de la app (Dia 3)
+  SMOKE_DIR: 'tienda-azure'             # carpeta de smoke + carga (Dia 3)
+  E2E_DIR:  'e2e'                        # carpeta que AGREGAS con la automatizacion
+
+stages:
+  - stage: CI_E2E
+    displayName: 'CI + E2E en un solo job (app viva todo el job)'
+    jobs:
+      - job: todo_en_uno
+        displayName: 'Build -> App -> Smoke -> Carga -> E2E -> Evidencia'
+        steps:
+          # 1) Traer el repo (uno solo)
+          - checkout: self
+
+          # 2) Preparar Node y Python
+          - task: NodeTool@0
+            displayName: 'Usar Node $(NODE_VERSION)'
+            inputs: { versionSpec: '$(NODE_VERSION)' }
+          - task: UsePythonVersion@0
+            displayName: 'Usar Python $(PYTHON_VERSION)'
+            inputs: { versionSpec: '$(PYTHON_VERSION)' }
+
+          # 3) BUILD: instalar la app y generar datos con Faker (postinstall)
+          - script: npm install
+            displayName: 'Build — npm install (genera datos con Faker)'
+            workingDirectory: '$(APP_DIR)'
+
+          # 4) Arrancar la app en segundo plano (&): queda VIVA todo el job
+          - script: |
+              node servidor/server.js &
+              echo "Esperando a que la app responda..."
+              for i in $(seq 1 20); do
+                if curl -sf http://localhost:3000/api/health > /dev/null; then
+                  echo "App lista"; break
+                fi
+                sleep 2
+              done
+            displayName: 'Arrancar la app en background (queda viva)'
+            workingDirectory: '$(APP_DIR)'
+
+          # 5) SMOKE: la app responde lo esencial (misma app viva)
+          - script: BASE_URL=$(BASE_URL) node tests/smoke-api.js
+            displayName: 'Smoke test de la API'
+            workingDirectory: '$(SMOKE_DIR)'
+
+          # 6) CARGA: quality gate de rendimiento (sale 1 si no cumple el SLA)
+          - script: BASE_URL=$(BASE_URL) CONCURRENCIA=15 DURACION_S=8 node tests/carga-simple.js
+            displayName: 'Prueba de carga (falla si no cumple el SLA)'
+            workingDirectory: '$(SMOKE_DIR)'
+
+          # 7) AUTOMATIZACION E2E: pytest-bdd contra la misma app viva
+          - script: |
+              pip install -r requirements.txt
+              python -m playwright install --with-deps chromium
+              pytest --junitxml=resultados/junit.xml
+            displayName: 'Automatizacion E2E (pytest-bdd)'
+            workingDirectory: '$(E2E_DIR)'
+            env:
+              BASE_URL: $(BASE_URL)
+
+          # 8) EVIDENCIA en el propio run (el junit quedo en e2e/resultados)
+          - task: PublishTestResults@2
+            condition: always()
+            displayName: 'Publicar resultados (JUnit) — pestana Tests'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(E2E_DIR)/resultados/junit.xml'
+              testRunTitle: 'E2E Tienda - Dia 4'
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            displayName: 'Adjuntar el XML como artefacto'
+            inputs:
+              targetPath: '$(E2E_DIR)/resultados'
+              artifact: 'resultados-e2e'
+
+# ══════════════════════════════════════════════════════════════════
+#  QUE AJUSTAR (si tu repo usa otros nombres de carpeta):
+#    - APP_DIR   : donde esta servidor/server.js de la app
+#    - SMOKE_DIR : donde estan tests/smoke-api.js y tests/carga-simple.js
+#    - E2E_DIR   : la carpeta que agregaste con la automatizacion (features, pytest, requirements.txt)
+#
+#  CLAVE: los pasos 3-8 estan en el MISMO job (todo_en_uno). La app arrancada en
+#  el paso 4 sigue viva en 5, 6 y 7. Al terminar el job, el agente (y la app)
+#  se destruyen juntos. En stages separados la app NO sobreviviria.
+# ══════════════════════════════════════════════════════════════════
