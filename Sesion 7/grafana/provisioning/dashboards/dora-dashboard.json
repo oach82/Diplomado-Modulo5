@@ -1,0 +1,194 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "schemaVersion": 39,
+  "tags": ["dora", "qa"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "DORA - app Tienda",
+  "uid": "dora-tienda",
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 10,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "# Métricas DORA — app Tienda\nVelocidad (frecuencia, lead time) y estabilidad (change failure rate, MTTR). Datos del servidor de métricas que calcula sobre `deployments.json`."
+      }
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "1. Frecuencia de despliegue (deploys/día)",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://metricas-dora:8900/metricas",
+          "url_options": { "method": "GET" },
+          "root_selector": "",
+          "columns": [
+            { "selector": "frecuencia_deploy_por_dia", "text": "deploys/dia", "type": "number" }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "orange", "value": 0.033 },
+            { "color": "yellow", "value": 0.142 },
+            { "color": "green", "value": 1 }
+          ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "2. Lead time (horas)",
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://metricas-dora:8900/metricas",
+          "url_options": { "method": "GET" },
+          "columns": [
+            { "selector": "lead_time_horas", "text": "horas", "type": "number" }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "h",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 24 },
+            { "color": "orange", "value": 168 },
+            { "color": "red", "value": 720 }
+          ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "3. Change failure rate (%)",
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://metricas-dora:8900/metricas",
+          "url_options": { "method": "GET" },
+          "columns": [
+            { "selector": "change_failure_rate_pct", "text": "%", "type": "number" }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percent",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 15 },
+            { "color": "red", "value": 30 }
+          ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "4. MTTR (horas)",
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 3 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://metricas-dora:8900/metricas",
+          "url_options": { "method": "GET" },
+          "columns": [
+            { "selector": "mttr_horas", "text": "horas", "type": "number" }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "h",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "orange", "value": 24 },
+            { "color": "red", "value": 168 }
+          ] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Resumen (valores + nivel de rendimiento)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "dora-infinity" },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://metricas-dora:8900/metricas",
+          "url_options": { "method": "GET" },
+          "columns": [
+            { "selector": "frecuencia_deploy_por_dia", "text": "Frecuencia (deploys/dia)", "type": "number" },
+            { "selector": "frecuencia_nivel", "text": "Nivel frec.", "type": "string" },
+            { "selector": "lead_time_horas", "text": "Lead time (h)", "type": "number" },
+            { "selector": "lead_time_nivel", "text": "Nivel LT", "type": "string" },
+            { "selector": "change_failure_rate_pct", "text": "CFR (%)", "type": "number" },
+            { "selector": "change_failure_rate_nivel", "text": "Nivel CFR", "type": "string" },
+            { "selector": "mttr_horas", "text": "MTTR (h)", "type": "number" },
+            { "selector": "mttr_nivel", "text": "Nivel MTTR", "type": "string" }
+          ]
+        }
+      ]
+    }
+  ]
+}

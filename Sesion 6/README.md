@@ -36,8 +36,30 @@ dia6/proyecto/
 
 ## Cómo correr el flujo completo (comandos podman, paso a paso)
 
-Ejecuta estos comandos desde `dia6/proyecto/`. En PowerShell usa `${PWD}` en lugar
-de `$PWD` para los volúmenes.
+> ### 📂 ¿Desde qué carpeta? (importante — hay varias subcarpetas)
+>
+> Para **Pact Python** te paras **EN `dia6/proyecto/`** (la carpeta que contiene
+> `consumer-notificaciones/`, `provider-tienda/`, `provider-verify/` y `pacts/`).
+> **NO entres** a esas subcarpetas: te quedas en `proyecto/` y los comandos las
+> referencian con `./consumer-notificaciones`, `./provider-tienda`, etc.
+>
+> ```
+> cd dia6/proyecto          ← AQUÍ te paras (no dentro de las subcarpetas)
+> # ✔ correcto:  podman build -t consumer-notificaciones ./consumer-notificaciones
+> # ✘ incorrecto: cd consumer-notificaciones  (NO entres aquí)
+> ```
+>
+> ¿Por qué en la raíz? Porque el volumen `-v "${PWD}/pacts:/pacts"` necesita que
+> `pacts/` esté dentro de tu carpeta actual, y las imágenes se construyen apuntando
+> a cada subcarpeta con `./nombre`. Si entras a una subcarpeta, los `./...` y el
+> `${PWD}/pacts` dejan de resolver.
+>
+> **Pact Java es la excepción:** esa vía SÍ se ejecuta DENTRO de la subcarpeta
+> `dia6/proyecto/tienda-serenity-java/` (ver su propio README). Regla rápida:
+> - Comando con `./consumer-notificaciones` / `./provider-tienda` → párate en `dia6/proyecto/`.
+> - Comando con `tienda-tests gradle ... Pact` → párate en `tienda-serenity-java/`.
+
+En PowerShell (Windows) usa `${PWD}` en lugar de `$PWD` para los volúmenes.
 
 ```bash
 # 0) Red compartida

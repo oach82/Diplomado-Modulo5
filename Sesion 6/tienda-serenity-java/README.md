@@ -145,6 +145,49 @@ podman compose build app-tienda     # reconstruir solo la app (tras cambiar el H
 
 Reporte Serenity: tras `e2e`, en `target/site/serenity/` (HTML de página única).
 
+> ### ⚠️ Windows: corre los tests con `podman run`, NO con `podman compose run`
+>
+> En **Podman sobre Windows (WSL)** encontramos DOS problemas al usar
+> `podman compose run --rm tests ...`:
+> 1. **Lock de Gradle**: `Timeout waiting to lock journal cache ... currently in use
+>    by another Gradle instance`. El `compose run` deja contenedores colgados que
+>    retienen el lock del volumen de caché.
+> 2. **E2E falla** con `no matching element found by [grid de productos]` aunque la
+>    app sirve el HTML correcto (era el bind mount `.:/work` sirviendo recursos
+>    incompletos al navegador).
+>
+> **Solución (verificada):** el servicio `tests` ahora empaqueta el código DENTRO de
+> una imagen (`Dockerfile.tests`), sin bind mount y sin volumen de caché compartido.
+> Y en Windows se corre con `podman run` directo (no `compose run`). **Verificado:**
+> `podman run` directo → 3 tests SUCCESS (100%); `podman compose run` → falla.
+>
+> ```powershell
+> # 1) stack completo arriba (sin el servicio tests)
+> podman compose up -d app-tienda postgres-hlm selector-imitator healenium hlm-proxy selenium-hub chrome
+>
+> # 2) construir la imagen de tests (una vez; el codigo va dentro)
+> podman build -t tienda-tests -f Dockerfile.tests .
+>
+> # 3) E2E con self-healing (podman run directo, --rm limpia al terminar)
+> podman run --rm --network tienda-serenity-java_default `
+>   -e HLM_PROXY_URL=http://hlm-proxy:8085/wd/hub `
+>   -e PROVIDER_BASE_URL=http://app-tienda:3000 `
+>   tienda-tests gradle --no-daemon --rerun-tasks -DbaseUrl=http://app-tienda:3000 e2e
+>
+> # Pact (misma imagen, cambiando la tarea):
+> podman run --rm --network tienda-serenity-java_default -e PROVIDER_BASE_URL=http://app-tienda:3000 `
+>   tienda-tests gradle --no-daemon consumerPact
+> podman run --rm --network tienda-serenity-java_default -e PROVIDER_BASE_URL=http://app-tienda:3000 `
+>   tienda-tests gradle --no-daemon providerPact
+> ```
+>
+> **Tras cambiar el HTML de la app** (ejercicio self-healing), reconstruye solo la
+> app: `podman compose build app-tienda` + recrear el contenedor. El código de los
+> tests no cambia, así que `tienda-tests` no se reconstruye salvo que toques `src/`.
+>
+> En **Linux/macOS** el bind mount es fiable; ahí `podman compose run --rm tests ...`
+> funciona directo.
+
 ---
 
 ## 4. Ejercicio Día 5 — self-healing con Healenium
@@ -225,6 +268,32 @@ de similitud y sanó el test. El `SCORE_CAP` del proxy es 0.6: por debajo de 60%
 de similitud NO sana (evita falsos positivos). También hay un reporte HTML en
 `report/` dentro del contenedor de tests.
 
+> ### ⚠️ Nota honesta: el REGISTRO del healing es intermitente en Windows/WSL
+>
+> **Qué funciona siempre (100% reproducible):**
+> - El E2E corre y pasa 3/3 con `podman run ... tienda-tests`.
+> - El **concepto** del self-healing: rompes el `data-testid` de la app y el test
+>   **sigue verde** (no se cae). Eso es lo esencial y ocurre en cada corrida.
+> - El aprendizaje de huellas (`healenium.selector`) cuando el stack está caliente.
+>
+> **Qué es intermitente:** el *registro* de la fila en `healenium.healing_result`.
+> En Podman sobre Windows (WSL), la conexión del WebDriver remoto a través del
+> `hlm-proxy` es inestable: a veces el driver pasa por el proxy (aprende y registra
+> el healing) y a veces va directo al grid (el test pasa, pero no se registra). No
+> es el código ni la configuración — están correctos; es la ruta WebDriver→proxy
+> sobre WSL. Síntoma: `healing_result` vacío aunque el test quedó verde.
+>
+> **Cómo demostrarlo de forma confiable (recomendado para clase):**
+> 1. Enfócate en lo sólido: romper el `data-testid` → el test sigue verde. Ese es
+>    el mensaje del self-healing y nunca falla.
+> 2. Para mostrar el registro, usa la **evidencia ya capturada y verificada**: la
+>    fila `filtro-categoria → select#filtro-categoria, 0.964`, el screenshot
+>    recuadrado en rojo (`evidencia-healing/`) y el dashboard `http://localhost:7878/healenium/report`.
+> 3. Si quieres capturarlo en vivo: deja el stack **caliente** (unos minutos tras
+>    `compose up`) y corre el E2E **2-3 veces seguidas**; cuando la ruta por el
+>    proxy "engancha", el healing se registra. Recuerda que la escritura en
+>    `healing_result` es **asíncrona**: espera ~15-20 s y vuelve a consultar.
+
 ### Comparar SIN self-healing
 
 En `build.gradle`, la tarea `e2e` usa `HLM_PROXY_URL` si está, o el grid directo
@@ -296,6 +365,21 @@ Selenium 4.25.0, Cucumber 7.20.1, Healenium **`hlm-backend:3.5.1`** (tag correct
   wsl.exe --terminate podman-machine-default
   podman machine start
   ```
+
+- **Gradle: "Timeout waiting to lock journal cache ... currently in use by another
+  Gradle instance"**: una corrida anterior de `tests` murió dejando un `.lock`
+  huérfano en el volumen `gradle-cache`, y la nueva corrida no puede tomarlo. Pasa
+  cuando se interrumpe un `compose run` o queda un contenedor `tests` colgado. Fix:
+  ```powershell
+  # 1) elimina el contenedor tests colgado
+  podman rm -f tests
+  # 2) borra los locks huérfanos del volumen de caché de Gradle
+  podman run --rm -v tienda-serenity-java_gradle-cache:/home/gradle/.gradle `
+    alpine sh -c "find /home/gradle/.gradle -name '*.lock' -delete"
+  ```
+  Luego vuelve a correr el E2E/Pact normalmente. (Alternativa drástica: `podman
+  compose down -v` borra el volumen de caché completo, pero la próxima corrida
+  re-descarga todas las dependencias de Gradle.)
 
 ## 8. Resultado verificado end-to-end
 

@@ -51,14 +51,14 @@
   <section id="vista-catalogo" class="vista activa" data-testid="vista-catalogo">
     <div class="filtros">
       <label for="filtro-categoria">Categoria:</label>
-      <select id="filtro-categoria" data-testid="filtro-categoria" onchange="renderCatalogo()">
+      <select id="filtro-categoria" data-testid="scategoria" onchange="renderCatalogo()">
         <option value="">Todas</option>
         <option value="hogar">Hogar</option>
         <option value="tecnologia">Tecnologia</option>
         <option value="ropa">Ropa</option>
         <option value="juguetes">Juguetes</option>
       </select>
-      <input id="busqueda" data-testid="busqueda" placeholder="Buscar producto..." oninput="renderCatalogo()">
+      <input id="busqueda" data-testid="boton" placeholder="Buscar producto..." oninput="renderCatalogo()">
     </div>
     <div id="grid" class="grid" data-testid="grid-productos"></div>
     <p id="sin-resultados" class="vacio" data-testid="sin-resultados" style="display:none;">No hay productos para ese filtro.</p>

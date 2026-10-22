@@ -1,0 +1,28 @@
+# ============================================================
+#  Imagen de TESTS — Gradle + el codigo del proyecto DENTRO de la imagen
+# ============================================================
+#  Por que no bind mount:
+#  En Podman sobre Windows (WSL), montar el proyecto con -v .:/work entrega
+#  los archivos de forma inconsistente en corridas largas. Sintoma: el E2E
+#  falla con "no matching element found by [grid de productos]" aunque la app
+#  sirve el HTML correcto. Copiando el codigo DENTRO de la imagen (como aqui),
+#  el navegador recibe recursos consistentes y el E2E pasa.
+#
+#  Cada corrida usa su propio GRADLE_USER_HOME dentro del contenedor, asi que
+#  NO hay volumen de cache compartido que se bloquee entre corridas (adios al
+#  "Timeout waiting to lock journal cache").
+# ============================================================
+FROM gradle:8.10.2-jdk21
+
+WORKDIR /work
+
+# Copiamos solo lo necesario para compilar y correr las pruebas.
+COPY build.gradle settings.gradle gradle.properties /work/
+COPY gradle /work/gradle
+COPY src /work/src
+
+# Cache de Gradle local a la imagen (no compartida por volumen => sin locks cruzados)
+ENV GRADLE_USER_HOME=/work/.gradle-home
+
+# Por defecto corre el E2E; se puede sobreescribir el comando en 'run'.
+CMD ["gradle", "--no-daemon", "-DbaseUrl=http://app-tienda:3000", "e2e"]

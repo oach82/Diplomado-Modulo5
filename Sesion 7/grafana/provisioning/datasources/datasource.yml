@@ -1,0 +1,19 @@
+# ============================================================
+#  Datasource de Grafana — Infinity (lee JSON por HTTP)
+# ============================================================
+#  Apunta al servidor de metricas DORA (servidor-metricas.js), que expone
+#  las 4 metricas en http://metricas-dora:8900/metricas dentro de la red.
+#  Infinity permite leer JSON de una URL sin base de datos.
+# ============================================================
+apiVersion: 1
+
+datasources:
+  - name: DORA-Infinity
+    uid: dora-infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      # sin auth; el servidor de metricas es interno de la red del stack
+      allowedHosts: ["http://metricas-dora:8900"]
+    editable: true

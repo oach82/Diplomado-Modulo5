@@ -1,0 +1,14 @@
+# ============================================================
+#  Provisioning de dashboards — carga automatica al arrancar Grafana
+# ============================================================
+apiVersion: 1
+
+providers:
+  - name: DORA
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

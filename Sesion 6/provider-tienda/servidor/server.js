@@ -55,6 +55,7 @@ app.get('/api/productos/:id', (req, res) => {
   const p = productos.find((x) => x.id === Number(req.params.id));
   if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
   res.json(p);
+  /** res.json("valor: precio"); */
 });
 
 app.post('/api/pedidos', (req, res) => {

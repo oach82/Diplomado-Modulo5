@@ -1,0 +1,16 @@
+# ============================================================
+#  Servidor de metricas DORA (Node) — alimenta a Grafana
+# ============================================================
+#  Empaqueta el servidor que expone las 4 metricas DORA como JSON.
+#  El codigo va DENTRO de la imagen (sin bind mount): evita el problema
+#  conocido del bind mount en Podman/Windows.
+# ============================================================
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY calcular-dora.js servidor-metricas.js deployments.json /app/
+
+EXPOSE 8900
+
+CMD ["node", "servidor-metricas.js"]

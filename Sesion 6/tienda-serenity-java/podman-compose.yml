@@ -131,26 +131,19 @@ services:
     shm_size: "2gb"
 
   # ── Tests: Gradle (E2E + Pact) ──
-  #   No arranca solo con 'up'; se invoca con 'run' para una tarea concreta.
-  #   HLM_PROXY_URL -> para E2E con self-healing (via proxy).
-  #   SELENIUM_GRID_URL -> para E2E SIN healing (comparar).
+  #   IMPORTANTE: este servicio NO se usa con 'compose up' ni 'compose run' en
+  #   Windows (podman-compose 1.5.0 rompe con el bind mount y con 'dockerfile:').
+  #   El codigo va DENTRO de la imagen 'tienda-tests', que se construye APARTE:
+  #       podman build -t tienda-tests -f Dockerfile.tests .
+  #   y se corre con 'podman run' directo (ver README seccion 3, nota Windows).
+  #   Se deja aqui solo como referencia/documentacion del contrato del servicio.
+  #   NOTA: usa 'image' (no 'build') para que 'compose up' no intente construirlo.
   tests:
-    image: gradle:8.10.2-jdk21
-    container_name: tests
+    image: tienda-tests
+    profiles: ["manual"]   # excluido de 'compose up' por defecto
     working_dir: /work
-    depends_on:
-      app-tienda:
-        condition: service_healthy
-      hlm-proxy:
-        condition: service_started
     environment:
       - HLM_PROXY_URL=http://hlm-proxy:8085/wd/hub
       - SELENIUM_GRID_URL=http://selenium-hub:4444/wd/hub
       - PROVIDER_BASE_URL=http://app-tienda:3000
-    volumes:
-      - .:/work
-      - gradle-cache:/home/gradle/.gradle
-    command: ["gradle", "--no-daemon", "-DbaseUrl=http://app-tienda:3000", "e2e"]
-
-volumes:
-  gradle-cache:
+    command: ["gradle", "--no-daemon", "--rerun-tasks", "-DbaseUrl=http://app-tienda:3000", "e2e"]

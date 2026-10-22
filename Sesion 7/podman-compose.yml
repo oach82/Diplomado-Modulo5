@@ -1,0 +1,51 @@
+# ============================================================
+#  Dia 7 — Tablero DORA en Grafana (Podman)
+#
+#  Dos servicios:
+#    metricas-dora -> servidor Node que calcula las 4 metricas DORA y las
+#                     expone como JSON en http://metricas-dora:8900/metricas
+#    grafana       -> dashboard DORA pre-provisionado (datasource Infinity)
+#
+#  Uso:
+#    podman compose up -d --build
+#    abrir http://localhost:3001  (admin / admin)  -> dashboard "DORA - app Tienda"
+#    podman compose down
+# ============================================================
+version: "3.8"
+
+services:
+  # ── Servidor de metricas (fuente de datos de Grafana) ──
+  #  NOTA: usamos 'image' (no 'build') porque podman-compose en Windows ignora
+  #  el campo 'dockerfile:'. Construye antes la imagen con:
+  #    podman build -t dora-metricas -f Dockerfile.metricas .
+  metricas-dora:
+    image: dora-metricas
+    container_name: metricas-dora
+    ports:
+      - "8900:8900"      # expuesto al host por si quieres ver el JSON crudo
+    # NOTA: deployments.json va DENTRO de la imagen (no bind mount). En Podman/
+    # Windows el bind mount de un archivo no propaga cambios. Para mover el
+    # dashboard: edita deployments.json, reconstruye la imagen y recrea este
+    # servicio (ver README, seccion "Mover el dashboard").
+
+  # ── Grafana con el dashboard DORA pre-cargado ──
+  #  IMPORTANTE: la version del plugin Infinity DEBE ser compatible con la de
+  #  Grafana. Infinity >=4.x externaliza 'react/jsx-runtime' y exige Grafana
+  #  >=11.6.11 (si no, el plugin falla con 404 de react/jsx-runtime y los
+  #  paneles quedan en "No data"). Por eso fijamos Infinity 3.7.1, la ultima
+  #  version compatible con Grafana 11.3.0 (grafanaDependency >=10.4.8).
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: grafana-dora
+    depends_on:
+      - metricas-dora
+    ports:
+      - "3001:3000"      # Grafana en http://localhost:3001 (3000 lo usa la tienda)
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true          # ver el dashboard sin login
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource 3.7.1   # version fija compatible con Grafana 11.3
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
