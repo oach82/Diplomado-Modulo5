@@ -1,0 +1,52 @@
+{
+  "consumer": {
+    "name": "notificaciones"
+  },
+  "provider": {
+    "name": "tienda-api"
+  },
+  "interactions": [
+    {
+      "description": "una peticion del producto 1",
+      "providerState": "existe el producto 1",
+      "request": {
+        "method": "get",
+        "path": "/api/productos/1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+        },
+        "body": {
+          "id": 1,
+          "nombre": "Tasty Concrete Chair",
+          "categoria": "hogar",
+          "precio": 106.25,
+          "stock": 5
+        },
+        "matchingRules": {
+          "$.body.id": {
+            "match": "type"
+          },
+          "$.body.nombre": {
+            "match": "type"
+          },
+          "$.body.categoria": {
+            "match": "type"
+          },
+          "$.body.precio": {
+            "match": "type"
+          },
+          "$.body.stock": {
+            "match": "type"
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  }
+}

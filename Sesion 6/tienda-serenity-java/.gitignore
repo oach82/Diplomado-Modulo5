@@ -1,0 +1,18 @@
+.gradle/
+build/
+target/
+out/
+app-tienda/node_modules/
+app-tienda/datos/db.json
+*.log
+.idea/
+*.iml
+# Healenium: screenshots, logs y reportes generados en runtime
+healenium/
+screenshots/
+report/
+logs/
+# ...pero conservamos la evidencia curada de la sanacion verificada:
+!evidencia-healing/
+# Serenity: historico de ejecuciones
+history/

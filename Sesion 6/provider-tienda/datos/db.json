@@ -1,0 +1,197 @@
+{
+  "productos": [
+    {
+      "id": 1,
+      "nombre": "Tasty Concrete Chair",
+      "categoria": "hogar",
+      "precio": 106.25,
+      "descripcion": "Rohan LLC's most advanced Sausages technology increases actual capabilities",
+      "stock": 5
+    },
+    {
+      "id": 2,
+      "nombre": "Generic Metal Shoes",
+      "categoria": "tecnologia",
+      "precio": 436.75,
+      "descripcion": "Savor the moist essence in our Chips, designed for shady culinary adventures",
+      "stock": 50
+    },
+    {
+      "id": 3,
+      "nombre": "Practical Rubber Chair",
+      "categoria": "ropa",
+      "precio": 18.28,
+      "descripcion": "Discover the kangaroo-like agility of our Pants, perfect for unlined users",
+      "stock": 37
+    },
+    {
+      "id": 4,
+      "nombre": "Sleek Granite Shoes",
+      "categoria": "juguetes",
+      "precio": 52.59,
+      "descripcion": "Our penguin-friendly Chair ensures dead comfort for your pets",
+      "stock": 39
+    },
+    {
+      "id": 5,
+      "nombre": "Tasty Metal Car",
+      "categoria": "hogar",
+      "precio": 247.3,
+      "descripcion": "Handcrafted Chips designed with Marble for colorful performance",
+      "stock": 35
+    },
+    {
+      "id": 6,
+      "nombre": "Rustic Marble Tuna",
+      "categoria": "tecnologia",
+      "precio": 318.89,
+      "descripcion": "New olive Cheese with ergonomic design for stable comfort",
+      "stock": 25
+    },
+    {
+      "id": 7,
+      "nombre": "Soft Wooden Keyboard",
+      "categoria": "ropa",
+      "precio": 129.99,
+      "descripcion": "Our fox-friendly Pizza ensures soft comfort for your pets",
+      "stock": 39
+    },
+    {
+      "id": 8,
+      "nombre": "Small Wooden Bike",
+      "categoria": "juguetes",
+      "precio": 455.8,
+      "descripcion": "The Ally Chair is the latest in a series of powerful products from Conroy - Larkin",
+      "stock": 35
+    },
+    {
+      "id": 9,
+      "nombre": "Small Metal Mouse",
+      "categoria": "hogar",
+      "precio": 357.02,
+      "descripcion": "New Bacon model with 96 GB RAM, 653 GB storage, and rewarding features",
+      "stock": 24
+    },
+    {
+      "id": 10,
+      "nombre": "Tasty Granite Ball",
+      "categoria": "tecnologia",
+      "precio": 285.96,
+      "descripcion": "New Chicken model with 10 GB RAM, 486 GB storage, and ample features",
+      "stock": 35
+    },
+    {
+      "id": 11,
+      "nombre": "Recycled Plastic Fish",
+      "categoria": "ropa",
+      "precio": 12.45,
+      "descripcion": "Experience the pink brilliance of our Computer, perfect for definite environments",
+      "stock": 44
+    },
+    {
+      "id": 12,
+      "nombre": "Frozen Marble Gloves",
+      "categoria": "juguetes",
+      "precio": 208.55,
+      "descripcion": "Innovative Ball featuring victorious technology and Silk construction",
+      "stock": 48
+    },
+    {
+      "id": 13,
+      "nombre": "Bespoke Marble Hat",
+      "categoria": "hogar",
+      "precio": 15.79,
+      "descripcion": "Savor the sweet essence in our Shirt, designed for stained culinary adventures",
+      "stock": 45
+    },
+    {
+      "id": 14,
+      "nombre": "Frozen Wooden Soap",
+      "categoria": "tecnologia",
+      "precio": 367,
+      "descripcion": "The Verla Bacon is the latest in a series of gifted products from Cormier, Cummings and Rosenbaum",
+      "stock": 3
+    },
+    {
+      "id": 15,
+      "nombre": "Recycled Granite Bacon",
+      "categoria": "ropa",
+      "precio": 388.59,
+      "descripcion": "Discover the dog-like agility of our Chicken, perfect for extra-large users",
+      "stock": 28
+    },
+    {
+      "id": 16,
+      "nombre": "Sleek Cotton Gloves",
+      "categoria": "juguetes",
+      "precio": 417.19,
+      "descripcion": "Professional-grade Gloves perfect for humiliating training and recreational use",
+      "stock": 42
+    },
+    {
+      "id": 17,
+      "nombre": "Incredible Marble Pizza",
+      "categoria": "hogar",
+      "precio": 233.89,
+      "descripcion": "The sleek and dim Chicken comes with fuchsia LED lighting for smart functionality",
+      "stock": 39
+    },
+    {
+      "id": 18,
+      "nombre": "Fresh Bamboo Pizza",
+      "categoria": "tecnologia",
+      "precio": 209.35,
+      "descripcion": "Introducing the Cuba-inspired Bike, blending annual style with local craftsmanship",
+      "stock": 11
+    },
+    {
+      "id": 19,
+      "nombre": "Fresh Metal Table",
+      "categoria": "ropa",
+      "precio": 390.99,
+      "descripcion": "New white Mouse with ergonomic design for guilty comfort",
+      "stock": 40
+    },
+    {
+      "id": 20,
+      "nombre": "Electronic Plastic Towels",
+      "categoria": "juguetes",
+      "precio": 402.79,
+      "descripcion": "Our giraffe-friendly Ball ensures simple comfort for your pets",
+      "stock": 40
+    },
+    {
+      "id": 21,
+      "nombre": "Handcrafted Rubber Hat",
+      "categoria": "hogar",
+      "precio": 362.09,
+      "descripcion": "The Smart composite access Salad offers reliable performance and informal design",
+      "stock": 39
+    },
+    {
+      "id": 22,
+      "nombre": "Tasty Steel Car",
+      "categoria": "tecnologia",
+      "precio": 399.95,
+      "descripcion": "The Nichole Bike is the latest in a series of indelible products from Metz - Parker",
+      "stock": 18
+    },
+    {
+      "id": 23,
+      "nombre": "Handcrafted Granite Mouse",
+      "categoria": "ropa",
+      "precio": 72.85,
+      "descripcion": "Our fish-friendly Shoes ensures ruddy comfort for your pets",
+      "stock": 13
+    },
+    {
+      "id": 24,
+      "nombre": "Soft Concrete Table",
+      "categoria": "juguetes",
+      "precio": 473.69,
+      "descripcion": "Stylish Towels designed to make you stand out with buzzing looks",
+      "stock": 20
+    }
+  ],
+  "pedidos": []
+}

@@ -1,0 +1,124 @@
+// ============================================================
+//  Proyecto integrador Dia 5 + Dia 6 (Java)
+//    - E2E: Serenity BDD + Screenplay + Cucumber (Selenium)
+//    - Self-healing: Healenium (proxy sobre Selenium Grid)
+//    - Contract testing: Pact JVM (consumer + provider)
+//
+//  Tareas principales (ver README):
+//    ./gradlew e2e            -> escenarios Cucumber E2E (Screenplay)
+//    ./gradlew consumerPact   -> genera el contrato Pact (lado consumer)
+//    ./gradlew providerPact   -> verifica el contrato contra el provider real
+// ============================================================
+plugins {
+    id 'java'
+    id 'net.serenity-bdd.serenity-gradle-plugin' version '4.2.14'
+}
+
+group = 'com.litethinking.qa'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    serenityVersion = '4.2.14'
+    seleniumVersion = '4.25.0'
+    cucumberVersion = '7.20.1'
+    junitVersion    = '5.11.3'
+    pactVersion     = '4.6.14'
+    healeniumVersion = '3.5.5'
+}
+
+dependencies {
+    // ── Serenity BDD + Screenplay + Cucumber ──
+    testImplementation "net.serenity-bdd:serenity-core:${serenityVersion}"
+    testImplementation "net.serenity-bdd:serenity-screenplay:${serenityVersion}"
+    testImplementation "net.serenity-bdd:serenity-screenplay-webdriver:${serenityVersion}"
+    testImplementation "net.serenity-bdd:serenity-cucumber:${serenityVersion}"
+    testImplementation "net.serenity-bdd:serenity-ensure:${serenityVersion}"
+
+    // ── Selenium (lo usa Serenity por debajo) ──
+    testImplementation "org.seleniumhq.selenium:selenium-java:${seleniumVersion}"
+
+    // NOTA: el self-healing NO necesita libreria en el proyecto. Se hace con el
+    // servicio hlm-proxy (healenium): Serenity apunta su WebDriver remoto al
+    // proxy (ver serenity.conf). El proxy se interpone de forma transparente.
+
+    // ── Cucumber + JUnit 5 ──
+    testImplementation "io.cucumber:cucumber-java:${cucumberVersion}"
+    testImplementation "io.cucumber:cucumber-junit-platform-engine:${cucumberVersion}"
+    testImplementation "org.junit.platform:junit-platform-suite:1.11.3"
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+
+    // ── Pact JVM: contract testing ──
+    testImplementation "au.com.dius.pact.consumer:junit5:${pactVersion}"
+    testImplementation "au.com.dius.pact.provider:junit5:${pactVersion}"
+
+    // ── HTTP client para el consumer (cliente de la API Tienda) ──
+    testImplementation "org.apache.httpcomponents.client5:httpclient5:5.4"
+
+    // Utilidades
+    testImplementation "org.assertj:assertj-core:3.26.3"
+    testImplementation "org.slf4j:slf4j-simple:2.0.16"
+}
+
+test {
+    useJUnitPlatform()
+    // Por defecto 'test' NO corre nada pesado; cada suite tiene su tarea.
+    exclude '**/*'
+}
+
+// URL de la app bajo prueba (contenedor por defecto en localhost:3000).
+// Se puede sobreescribir: ./gradlew e2e -DbaseUrl=http://app-tienda:3000
+def baseUrl = System.getProperty('baseUrl', 'http://localhost:3000')
+
+// ── E2E: escenarios Cucumber con Screenplay (y Healenium si esta activo) ──
+tasks.register('e2e', Test) {
+    description = 'Corre los escenarios E2E (Serenity Screenplay + Cucumber).'
+    group = 'verification'
+    useJUnitPlatform()
+    include '**/RunCucumberE2ETest.class'
+    systemProperty 'baseUrl', baseUrl
+    systemProperty 'webdriver.base.url', baseUrl
+    // URL del WebDriver remoto: el hlm-proxy (self-healing) si HLM_PROXY_URL
+    // esta definido; si no, el Selenium Grid directo (sin healing, util para
+    // comparar). Se pasa explicito como system property para que Serenity lo
+    // tome con seguridad.
+    def driverUrl = System.getenv('HLM_PROXY_URL') ?:
+            (System.getenv('SELENIUM_GRID_URL') ?: 'http://localhost:4444/wd/hub')
+    systemProperty 'webdriver.remote.url', driverUrl
+    outputs.upToDateWhen { false }
+    finalizedBy 'aggregate'
+}
+
+// ── Pact CONSUMER: genera el contrato (no necesita el provider real) ──
+tasks.register('consumerPact', Test) {
+    description = 'Genera el contrato Pact (lado consumer notificaciones).'
+    group = 'verification'
+    useJUnitPlatform()
+    include '**/NotificacionesConsumerPactTest.class'
+    systemProperty 'pact.rootDir', "${projectDir}/build/pacts"
+    outputs.upToDateWhen { false }
+}
+
+// ── Pact PROVIDER: verifica el contrato contra el provider real ──
+//  URL del provider: por -Dprovider.base.url, o por la variable de entorno
+//  PROVIDER_BASE_URL (practico en contenedores), o baseUrl por defecto.
+def providerUrl = System.getProperty('provider.base.url',
+        System.getenv('PROVIDER_BASE_URL') ?: baseUrl)
+
+tasks.register('providerPact', Test) {
+    description = 'Verifica el contrato Pact contra el provider real (app-tienda).'
+    group = 'verification'
+    useJUnitPlatform()
+    include '**/TiendaApiProviderPactTest.class'
+    systemProperty 'provider.base.url', providerUrl
+    systemProperty 'pact.rootDir', System.getProperty('pact.rootDir', "${projectDir}/build/pacts")
+    outputs.upToDateWhen { false }
+}
+
+// Reporte Serenity al terminar e2e
+serenity {
+    reports = ['single-page-html']
+}

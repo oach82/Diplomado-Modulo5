@@ -1,0 +1,2 @@
+# Verificacion del provider contra el contrato Pact
+pact-python==2.2.2

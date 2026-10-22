@@ -1,0 +1,156 @@
+# ============================================================
+#  Stack integrador Dia 6 (todo en contenedores) — VERIFICADO con Podman
+#
+#  Servicios:
+#    app-tienda        -> SUT: front + API de la Tienda (Node). Tambien provider Pact.
+#    postgres-hlm      -> base de datos de Healenium (guarda arboles de elementos)
+#    selector-imitator -> servicio ML que sugiere el nuevo localizador
+#    healenium         -> backend de Healenium (motor de self-healing)
+#    hlm-proxy         -> PROXY entre Serenity y el Grid; aqui ocurre el healing
+#    selenium-hub      -> Selenium Grid (hub)
+#    chrome            -> nodo Chrome del Grid (navegador real headless)
+#    tests             -> corre Gradle (E2E Screenplay o Pact JVM)
+#
+#  Funciona con:  podman compose up ...   (o docker compose up ...)
+#  Los servicios se ven entre si por su NOMBRE dentro de esta red.
+#
+#  ENFOQUE SELF-HEALING (oficial Healenium para Serenity, healenium.io/frameworks):
+#  Serenity usa un WebDriver remoto que apunta al hlm-proxy (NO al grid directo).
+#  El proxy se interpone: si un localizador falla, consulta a healenium, encuentra
+#  el elemento mas parecido y continua. Por eso el proyecto NO usa la libreria
+#  healenium-web: basta con apuntar al proxy.
+# ============================================================
+version: "3.8"
+
+services:
+  # ── SUT: la app Tienda (front + API) ──
+  app-tienda:
+    build: ./app-tienda
+    container_name: app-tienda
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "3000:3000"
+
+  # ── Healenium: base de datos ──
+  postgres-hlm:
+    image: postgres:15-alpine
+    container_name: postgres-hlm
+    environment:
+      POSTGRES_DB: healenium
+      POSTGRES_USER: healenium_user
+      POSTGRES_PASSWORD: YDy6UJ3qTdSZt9F9
+    volumes:
+      - ./healenium-db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healenium_user -d healenium"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Healenium: servicio ML que sugiere el nuevo localizador ──
+  selector-imitator:
+    image: healenium/hlm-selector-imitator:1.6
+    container_name: selector-imitator
+    ports:
+      - "8000:8000"
+
+  # ── Healenium: backend (motor de self-healing) ──
+  #  CRITICO: FIND_ELEMENTS_AUTO_HEALING=true. Serenity resuelve los Targets con
+  #  findElements (plural); Healenium desactiva el healing de busquedas plurales
+  #  por defecto, asi que hay que activarlo o el self-healing NO ocurre.
+  healenium:
+    image: healenium/hlm-backend:3.5.1
+    container_name: healenium
+    depends_on:
+      postgres-hlm:
+        condition: service_healthy
+      selector-imitator:
+        condition: service_started
+    environment:
+      - SPRING_POSTGRES_DB=healenium
+      - SPRING_POSTGRES_SCHEMA=healenium
+      - SPRING_POSTGRES_DB_HOST=postgres-hlm
+      - SPRING_POSTGRES_USER=healenium_user
+      - SPRING_POSTGRES_PASSWORD=YDy6UJ3qTdSZt9F9
+      - KEY_SELECTOR_URL=false
+      - COLLECT_METRICS=true
+      - FIND_ELEMENTS_AUTO_HEALING=true
+      - HLM_LOG_LEVEL=info
+    ports:
+      - "7878:7878"
+    # Healenium guarda aqui el screenshot de cada sanacion (evidencia visual).
+    volumes:
+      - ./screenshots:/screenshots
+      - ./logs:/logs
+
+  # ── Healenium: proxy (donde Serenity conecta su WebDriver) ──
+  hlm-proxy:
+    image: healenium/hlm-proxy:2.2.1
+    container_name: hlm-proxy
+    depends_on:
+      healenium:
+        condition: service_started
+      selenium-hub:
+        condition: service_started
+    environment:
+      - RECOVERY_TRIES=1
+      - SCORE_CAP=.6
+      - HEAL_ENABLED=true
+      - SELENIUM_SERVER_URL=http://selenium-hub:4444/wd/hub
+      - HEALENIUM_SERVER_URL=http://healenium:7878
+      - HEALENIUM_SERVICE=http://healenium:7878
+      - IMITATE_SERVICE=http://selector-imitator:8000
+      - HLM_LOG_LEVEL=debug
+    ports:
+      - "8085:8085"
+
+  # ── Selenium Grid: hub ──
+  selenium-hub:
+    image: selenium/hub:4.25.0
+    container_name: selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+
+  # ── Selenium Grid: nodo Chrome (navegador real headless) ──
+  chrome:
+    image: selenium/node-chromium:4.25.0
+    container_name: chrome
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=2
+    shm_size: "2gb"
+
+  # ── Tests: Gradle (E2E + Pact) ──
+  #   No arranca solo con 'up'; se invoca con 'run' para una tarea concreta.
+  #   HLM_PROXY_URL -> para E2E con self-healing (via proxy).
+  #   SELENIUM_GRID_URL -> para E2E SIN healing (comparar).
+  tests:
+    image: gradle:8.10.2-jdk21
+    container_name: tests
+    working_dir: /work
+    depends_on:
+      app-tienda:
+        condition: service_healthy
+      hlm-proxy:
+        condition: service_started
+    environment:
+      - HLM_PROXY_URL=http://hlm-proxy:8085/wd/hub
+      - SELENIUM_GRID_URL=http://selenium-hub:4444/wd/hub
+      - PROVIDER_BASE_URL=http://app-tienda:3000
+    volumes:
+      - .:/work
+      - gradle-cache:/home/gradle/.gradle
+    command: ["gradle", "--no-daemon", "-DbaseUrl=http://app-tienda:3000", "e2e"]
+
+volumes:
+  gradle-cache:

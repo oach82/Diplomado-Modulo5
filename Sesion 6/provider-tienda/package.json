@@ -1,0 +1,18 @@
+{
+  "name": "provider-tienda",
+  "version": "1.0.0",
+  "description": "Provider del Dia 6: la API de la Tienda. Expone /api/productos y /api/pedidos. Es el 'provider' en el contract testing con Pact.",
+  "type": "module",
+  "main": "servidor/server.js",
+  "scripts": {
+    "generar": "node datos/generar-datos.js",
+    "start": "node servidor/server.js",
+    "postinstall": "node datos/generar-datos.js"
+  },
+  "author": "Lite Thinking University of Technology",
+  "license": "MIT",
+  "dependencies": {
+    "@faker-js/faker": "^9.0.3",
+    "express": "^4.21.0"
+  }
+}
